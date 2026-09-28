@@ -98,7 +98,7 @@ const RemediationPlanView: React.FC<RemediationPlanViewProps> = ({ option, optio
               <Alert
                 variant="warning"
                 isInline
-                title={t('This remediation cannot be rolled back')}
+                title={t('This remediation is irreversible')}
                 className="cluster-update-plugin__irreversibility-warning"
               >
                 {t(
@@ -138,7 +138,7 @@ const RemediationPlanView: React.FC<RemediationPlanViewProps> = ({ option, optio
 
           {remediationPlan.rollbackPlan && (
             <StackItem>
-              <ExpandableSection toggleText={t('Rollback Plan')} isIndented>
+              <ExpandableSection toggleText={t('Recovery Plan')} isIndented>
                 <Stack hasGutter>
                   <StackItem>
                     <Content component="p">{remediationPlan.rollbackPlan.description}</Content>
@@ -146,7 +146,7 @@ const RemediationPlanView: React.FC<RemediationPlanViewProps> = ({ option, optio
                   {remediationPlan.rollbackPlan.command && (
                     <StackItem>
                       <Content component="p">
-                        <strong>{t('Rollback command:')}</strong>
+                        <strong>{t('Recovery command:')}</strong>
                       </Content>
                       <Content component="pre" className="cluster-update-plugin__rollback-command">
                         <code>{remediationPlan.rollbackPlan.command}</code>

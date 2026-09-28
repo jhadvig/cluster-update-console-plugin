@@ -35,6 +35,7 @@ import {
   getAnalysisDataFromResult,
   getDecisionDisplay,
   getPhaseDisplay,
+  hasRemediationPlan,
 } from '../../models/agenticrun';
 import { I18N_NAMESPACE, LABELS } from '../../utils/constants';
 import { compareSemVer, unsanitizeVersion } from '../../utils/version';
@@ -140,7 +141,7 @@ type UpdatePlanTabProps = {
   agenticRuns: LightspeedAgenticRun[];
 };
 
-const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ agenticRuns }) => {
+const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRuns }) => {
   const { t } = useTranslation(I18N_NAMESPACE);
   const [selectedName, setSelectedName] = React.useState('');
   const [expandedPanels, setExpandedPanels] = React.useState<Set<string>>(new Set());
