@@ -34,6 +34,7 @@ import {
   derivePhase,
   getAnalysisDataFromResult,
   getDecisionDisplay,
+  getFailedStage,
   getPhaseDisplay,
   hasRemediationPlan,
 } from '../../models/agenticrun';
@@ -340,6 +341,7 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
           const target = rawTarget ? unsanitizeVersion(rawTarget) : name;
           const pPhase = derivePhase(agenticRun);
           const phaseDisplay = getPhaseDisplay(pPhase);
+          const failedStage = pPhase === 'Failed' ? getFailedStage(agenticRun) : undefined;
 
           const stepResults = agenticRun.status?.steps?.analysis?.results;
           const resultRef = (stepResults?.[stepResults.length - 1] as { name?: string })?.name;
@@ -435,11 +437,13 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
                     </StackItem>
                   ) : pPhase === 'Failed' ? (
                     <StackItem>
-                      <Alert variant="danger" isInline title={t('Analysis failed')}>
+                      <Alert
+                        variant="danger"
+                        isInline
+                        title={t('{{stage}} failed', { stage: failedStage?.label ?? 'Unknown' })}
+                      >
                         {result?.status?.failureReason ??
-                          (
-                            agenticRun.status?.conditions as { type: string; message: string }[]
-                          )?.find((c) => c.type === 'Analyzed')?.message ??
+                          failedStage?.message ??
                           t('Unknown error')}
                       </Alert>
                     </StackItem>
