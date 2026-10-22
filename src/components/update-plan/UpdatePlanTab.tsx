@@ -43,6 +43,7 @@ import { useAgenticRunApprovals, useAnalysisResults } from '../../hooks/useAgent
 import PhaseLabel from '../shared/PhaseLabel';
 import PlanHeader from './PlanHeader';
 import AnalysisResultView from './AnalysisResultView';
+import ApprovalPolicyWarningBanner from './ApprovalPolicyWarningBanner';
 // TODO: Re-enable DecisionActions post-TP
 // import DecisionActions from './DecisionActions';
 
@@ -122,6 +123,17 @@ const ReanalyseButton: React.FC<ReanalyseButtonProps> = ({ agenticRun }) => {
     </>
   );
 };
+
+type UpdatePlanLayoutProps = {
+  children: React.ReactNode;
+};
+
+const UpdatePlanLayout: React.FC<UpdatePlanLayoutProps> = ({ children }) => (
+  <Stack hasGutter>
+    <ApprovalPolicyWarningBanner />
+    {children}
+  </Stack>
+);
 
 type UpdatePlanTabProps = {
   clusterVersion: ClusterVersion;
@@ -228,20 +240,24 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ agenticRuns }) => {
 
   if (agenticRuns.length === 0) {
     return (
-      <EmptyState titleText={t('No update plans available')} headingLevel="h2" icon={CubesIcon}>
-        <EmptyStateBody>
-          {t(
-            'Update plans are created automatically when the cluster-version-operator detects available update paths.',
-          )}
-        </EmptyStateBody>
-      </EmptyState>
+      <UpdatePlanLayout>
+        <StackItem>
+          <EmptyState titleText={t('No update plans available')} headingLevel="h2" icon={CubesIcon}>
+            <EmptyStateBody>
+              {t(
+                'Update plans are created automatically when the cluster-version-operator detects available update paths.',
+              )}
+            </EmptyStateBody>
+          </EmptyState>
+        </StackItem>
+      </UpdatePlanLayout>
     );
   }
 
   const showAnalyseButton = selectedPhase === 'Pending';
 
   return (
-    <Stack hasGutter>
+    <UpdatePlanLayout>
       {/* Run selector */}
       <StackItem>
         <Card>
@@ -439,7 +455,7 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ agenticRuns }) => {
             </StackItem>
           );
         })}
-    </Stack>
+    </UpdatePlanLayout>
   );
 };
 
