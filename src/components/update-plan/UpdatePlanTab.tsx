@@ -401,6 +401,11 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
                   <StackItem>
                     <PlanHeader agenticRun={agenticRun} />
                   </StackItem>
+                  {hasStepLogs(agenticRun, 'analysis') && (
+                    <StackItem>
+                      <AnalysisLogs run={agenticRun} />
+                    </StackItem>
+                  )}
                   {pPhase === 'Analyzing' || (pPhase === 'Pending' && submittedNames.has(name)) ? (
                     <StackItem>
                       <Card>
@@ -480,11 +485,6 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
                         </StackItem>
                       )}
                     </>
-                  )}
-                  {hasStepLogs(agenticRun, 'analysis') && (
-                    <StackItem>
-                      <AnalysisLogs run={agenticRun} />
-                    </StackItem>
                   )}
                   {hasExecution(agenticRun) && (
                     <StackItem>
