@@ -37,6 +37,7 @@ import RemediationPlanView from './RemediationPlanView';
 
 type AnalysisResultViewProps = {
   analysisData: AnalysisData;
+  analysisLogs?: React.ReactNode;
 };
 
 const checkStatusIcon = (status: string) => {
@@ -112,7 +113,7 @@ const getConfidenceColor = (
   }
 };
 
-const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ analysisData }) => {
+const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ analysisData, analysisLogs }) => {
   const { t } = useTranslation(I18N_NAMESPACE);
   const [expandedOptions, setExpandedOptions] = React.useState<Set<number>>(new Set([0]));
 
@@ -125,8 +126,7 @@ const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ analysisData })
   const olmStatus = getOlmOperatorStatus(components);
 
   // Determine decision for AI Assessment card
-  const decision =
-    readinessSummary?.decision ?? (legacyData?.decision as string | undefined) ?? '';
+  const decision = readinessSummary?.decision ?? (legacyData?.decision as string | undefined) ?? '';
 
   // Legacy format checks
   const legacySummary = (legacyData?.summary as string) ?? '';
@@ -143,7 +143,14 @@ const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ analysisData })
     legacyData;
 
   if (!hasAnyData) {
-    return <Content component="p">{t('Analysis data not available.')}</Content>;
+    return (
+      <Stack hasGutter>
+        <StackItem>
+          <Content component="p">{t('Analysis data not available.')}</Content>
+        </StackItem>
+        {analysisLogs && <StackItem>{analysisLogs}</StackItem>}
+      </Stack>
+    );
   }
 
   return (
@@ -257,11 +264,7 @@ const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ analysisData })
             <Alert
               key={`finding-${i}`}
               variant={
-                f.severity === 'blocker'
-                  ? 'danger'
-                  : f.severity === 'warning'
-                    ? 'warning'
-                    : 'info'
+                f.severity === 'blocker' ? 'danger' : f.severity === 'warning' ? 'warning' : 'info'
               }
               isInline
               title={`${SEVERITY_LABELS[f.severity] ?? f.severity}: ${f.check}`}
@@ -329,6 +332,8 @@ const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({ analysisData })
           </Card>
         </StackItem>
       )}
+
+      {analysisLogs && <StackItem>{analysisLogs}</StackItem>}
 
       {/* Remediation Mode: Diagnosis and Remediation Plans */}
       {hasRemediationMode &&

@@ -86,7 +86,8 @@ const RemediationPlanView: React.FC<RemediationPlanViewProps> = ({ option, optio
               {remediationPlan.reversible && (
                 <>
                   {' '}
-                  <strong>{t('Reversibility:')}</strong> {getReversibilityIcon(remediationPlan.reversible)}{' '}
+                  <strong>{t('Reversibility:')}</strong>{' '}
+                  {getReversibilityIcon(remediationPlan.reversible)}
                   {remediationPlan.reversible}
                 </>
               )}

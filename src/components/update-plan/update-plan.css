@@ -1,3 +1,12 @@
+.cluster-update-plugin__phase-heading {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  color: var(--pf-t--global--text--color--regular);
+  font-size: var(--pf-t--global--font--size--lg);
+  font-weight: var(--pf-t--global--font--weight--bold);
+}
+
 /* ActivePlanView layout */
 .cluster-update-plugin__active-plan {
   padding-block-start: var(--pf-t--global--spacer--md);

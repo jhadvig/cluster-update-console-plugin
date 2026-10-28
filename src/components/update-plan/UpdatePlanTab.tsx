@@ -9,16 +9,13 @@ import {
   Content,
   EmptyState,
   EmptyStateBody,
-  ExpandableSection,
   Flex,
   FlexItem,
   FormSelect,
   FormSelectOption,
-  Label,
   Modal,
   ModalBody,
   ModalFooter,
-  Spinner,
   Stack,
   StackItem,
 } from '@patternfly/react-core';
@@ -28,27 +25,16 @@ import { ClusterVersion } from '../../models/clusterversion';
 import {
   LightspeedAgenticRun,
   LightspeedAgenticRunModel,
-  LightspeedAnalysisResult,
-  ACTIVE_AGENTIC_RUN_PHASES,
   derivePhase,
-  getAnalysisDataFromResult,
-  getDecisionDisplay,
-  getFailedStage,
   getPhaseDisplay,
-  hasRemediationPlan,
 } from '../../models/agenticrun';
 import { I18N_NAMESPACE, LABELS } from '../../utils/constants';
 import { compareSemVer, unsanitizeVersion } from '../../utils/version';
 import { useApprovalActions } from '../../hooks/useApprovalActions';
 import { useAgenticRunApprovals, useAnalysisResults } from '../../hooks/useAgenticRuns';
 import PhaseLabel from '../shared/PhaseLabel';
-import PlanHeader from './PlanHeader';
-import AnalysisResultView from './AnalysisResultView';
 import ApprovalPolicyWarningBanner from './ApprovalPolicyWarningBanner';
-import DecisionActions from './DecisionActions';
-import { AnalysisLogs, ExecutionLogs } from '../shared/ExecutionLogs';
-import { hasExecution } from '../../utils/execution';
-import { hasStepLogs } from '../../utils/logPhase';
+import UpdatePlanSections from './UpdatePlanSections';
 
 type ReanalyseButtonProps = {
   agenticRun: LightspeedAgenticRun;
@@ -151,11 +137,8 @@ type UpdatePlanTabProps = {
 const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRuns }) => {
   const { t } = useTranslation(I18N_NAMESPACE);
   const [selectedName, setSelectedName] = React.useState('');
-  const [expandedPanels, setExpandedPanels] = React.useState<Set<string>>(new Set());
-  const userCollapsedRef = React.useRef<Set<string>>(new Set());
   const [submittedNames, setSubmittedNames] = React.useState<Set<string>>(new Set());
   const [approvalsRaw] = useAgenticRunApprovals();
-  const approvals = approvalsRaw ?? [];
   const [analysisResultsRaw] = useAnalysisResults();
   const analysisResults = analysisResultsRaw ?? [];
 
@@ -166,27 +149,15 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
 
   const selectedApproval = React.useMemo(
     () =>
-      approvals.find(
+      (approvalsRaw ?? []).find(
         (a) =>
           a.metadata?.name === selectedRun?.metadata?.name &&
           a.metadata?.namespace === selectedRun?.metadata?.namespace,
       ),
-    [approvals, selectedRun],
+    [approvalsRaw, selectedRun],
   );
 
   const selectedPhase = derivePhase(selectedRun);
-
-  // All runs that are active (analyzing, analyzed, or just submitted)
-  const activeRuns = React.useMemo(
-    () =>
-      agenticRuns.filter((p) => {
-        const phase = derivePhase(p);
-        if (ACTIVE_AGENTIC_RUN_PHASES.has(phase)) return true;
-        if (submittedNames.has(p.metadata?.name ?? '')) return true;
-        return false;
-      }),
-    [agenticRuns, submittedNames],
-  );
 
   // Clear submitted tracking once the real phase kicks in
   React.useEffect(() => {
@@ -199,20 +170,6 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
     if (stillPending.size < submittedNames.size) setSubmittedNames(stillPending);
   }, [agenticRuns, submittedNames]);
 
-  // Auto-expand newly active runs unless the user manually collapsed them
-  React.useEffect(() => {
-    if (activeRuns.length > 0) {
-      setExpandedPanels((prev) => {
-        const next = new Set(prev);
-        activeRuns.forEach((p) => {
-          const name = p.metadata?.name;
-          if (name && !userCollapsedRef.current.has(name)) next.add(name);
-        });
-        return next;
-      });
-    }
-  }, [activeRuns]);
-
   const { approveStage, error: approveError, inProgress } = useApprovalActions(selectedApproval);
 
   const handleAnalyse = React.useCallback(async () => {
@@ -221,7 +178,6 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
     const ok = await approveStage('Analysis');
     if (ok) {
       setSubmittedNames((prev) => new Set(prev).add(name));
-      setExpandedPanels((prev) => new Set(prev).add(name));
     }
   }, [selectedRun, approveStage]);
 
@@ -231,20 +187,6 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
       setSelectedName(agenticRuns[0].metadata?.name ?? '');
     }
   }, [selectedName, agenticRuns]);
-
-  const togglePanel = React.useCallback((name: string) => {
-    setExpandedPanels((prev) => {
-      const next = new Set(prev);
-      if (next.has(name)) {
-        next.delete(name);
-        userCollapsedRef.current.add(name);
-      } else {
-        next.add(name);
-        userCollapsedRef.current.delete(name);
-      }
-      return next;
-    });
-  }, []);
 
   if (agenticRuns.length === 0) {
     return (
@@ -339,166 +281,16 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
         </Card>
       </StackItem>
 
-      {/* Selected run's expandable panel */}
-      {activeRuns
-        .filter((r) => r.metadata?.name === selectedName)
-        .map((agenticRun) => {
-          const name = agenticRun.metadata?.name ?? '';
-          const rawTarget = agenticRun.metadata?.labels?.[LABELS.targetVersion] ?? '';
-          const target = rawTarget ? unsanitizeVersion(rawTarget) : name;
-          const pPhase = derivePhase(agenticRun);
-          const phaseDisplay = getPhaseDisplay(pPhase);
-          const failedStage = pPhase === 'Failed' ? getFailedStage(agenticRun) : undefined;
-
-          const stepResults = agenticRun.status?.steps?.analysis?.results;
-          const resultRef = (stepResults?.[stepResults.length - 1] as { name?: string })?.name;
-          const result = resultRef
-            ? analysisResults.find(
-                (r: LightspeedAnalysisResult) =>
-                  r.metadata?.name === resultRef &&
-                  r.metadata?.namespace === agenticRun.metadata?.namespace,
-              )
-            : undefined;
-          const resultData = getAnalysisDataFromResult(result);
-          const readinessSummary = resultData.components.find(
-            (c) => c.type === 'ota_readiness_summary',
-          );
-          const decision =
-            ((readinessSummary as Record<string, unknown>)?.decision as string | undefined) ??
-            (resultData.analysisData?.decision as string | undefined);
-          const decisionDisplay = decision ? getDecisionDisplay(decision) : undefined;
-
-          return (
-            <StackItem key={name}>
-              <ExpandableSection
-                toggleContent={
-                  <Flex alignItems={{ default: 'alignItemsCenter' }} gap={{ default: 'gapSm' }}>
-                    <FlexItem>
-                      <strong>{t('Update to {{version}}', { version: target })}</strong>
-                    </FlexItem>
-                    <FlexItem>
-                      <Label color={phaseDisplay.color} isCompact>
-                        {phaseDisplay.label}
-                      </Label>
-                    </FlexItem>
-                    {decisionDisplay && pPhase !== 'Analyzing' && (
-                      <FlexItem>
-                        <Label color={decisionDisplay.color} isCompact>
-                          {decisionDisplay.label}
-                        </Label>
-                      </FlexItem>
-                    )}
-                    <FlexItem>
-                      <ReanalyseButton agenticRun={agenticRun} />
-                    </FlexItem>
-                  </Flex>
-                }
-                isExpanded={expandedPanels.has(name)}
-                onToggle={() => togglePanel(name)}
-                isIndented
-              >
-                <Stack hasGutter>
-                  <StackItem>
-                    <PlanHeader agenticRun={agenticRun} />
-                  </StackItem>
-                  {hasStepLogs(agenticRun, 'analysis') && (
-                    <StackItem>
-                      <AnalysisLogs run={agenticRun} />
-                    </StackItem>
-                  )}
-                  {pPhase === 'Analyzing' || (pPhase === 'Pending' && submittedNames.has(name)) ? (
-                    <StackItem>
-                      <Card>
-                        <CardBody>
-                          <Flex
-                            alignItems={{ default: 'alignItemsCenter' }}
-                            gap={{ default: 'gapMd' }}
-                          >
-                            <FlexItem>
-                              <Spinner size="lg" aria-label={t('Analyzing')} />
-                            </FlexItem>
-                            <FlexItem>
-                              <Stack>
-                                <StackItem>
-                                  <strong>
-                                    {agenticRun.status?.steps?.analysis?.sandbox?.claimName
-                                      ? t('AI agent is analysing cluster readiness...')
-                                      : t('Starting analysis — waiting for agent sandbox...')}
-                                  </strong>
-                                </StackItem>
-                                {agenticRun.status?.steps?.analysis?.sandbox?.claimName && (
-                                  <StackItem>
-                                    <Content component="small">
-                                      {t('Sandbox: {{name}}', {
-                                        name: agenticRun.status.steps.analysis.sandbox.claimName,
-                                      })}
-                                    </Content>
-                                  </StackItem>
-                                )}
-                              </Stack>
-                            </FlexItem>
-                          </Flex>
-                        </CardBody>
-                      </Card>
-                    </StackItem>
-                  ) : pPhase === 'Failed' ? (
-                    <StackItem>
-                      <Alert
-                        variant="danger"
-                        isInline
-                        title={t('{{stage}} failed', { stage: failedStage?.label ?? 'Unknown' })}
-                      >
-                        {(failedStage?.label === 'Analysis'
-                          ? result?.status?.failureReason
-                          : undefined) ??
-                          failedStage?.message ??
-                          t('Unknown error')}
-                      </Alert>
-                    </StackItem>
-                  ) : (
-                    <>
-                      <StackItem>
-                        {resultData.options.length > 0 ||
-                        resultData.components.length > 0 ||
-                        resultData.analysisData ? (
-                          <AnalysisResultView analysisData={resultData} />
-                        ) : (
-                          <Content component="p">{t('Analysis result not yet available.')}</Content>
-                        )}
-                      </StackItem>
-                      {result && !hasRemediationPlan(result) && pPhase === 'Proposed' && (
-                        <StackItem>
-                          <Alert variant="info" isInline title={t('No remediation plan available')}>
-                            {t(
-                              'Analysis indicates this upgrade is not feasible. Review diagnosis for details.',
-                            )}
-                          </Alert>
-                        </StackItem>
-                      )}
-                      {result && hasRemediationPlan(result) && pPhase === 'Proposed' && (
-                        <StackItem>
-                          <DecisionActions
-                            agenticRun={agenticRun}
-                            clusterVersion={clusterVersion}
-                            analysisData={resultData}
-                          />
-                        </StackItem>
-                      )}
-                    </>
-                  )}
-                  {hasExecution(agenticRun) && (
-                    <StackItem>
-                      <ExecutionLogs
-                        key={`${agenticRun.metadata?.uid}-${agenticRun.status?.steps?.execution?.sandbox?.claimName}-${agenticRun.status?.steps?.execution?.retryCount ?? 0}`}
-                        run={agenticRun}
-                      />
-                    </StackItem>
-                  )}
-                </Stack>
-              </ExpandableSection>
-            </StackItem>
-          );
-        })}
+      {selectedRun && (
+        <UpdatePlanSections
+          key={selectedRun.metadata?.uid ?? selectedName}
+          agenticRun={selectedRun}
+          clusterVersion={clusterVersion}
+          analysisResults={analysisResults}
+          submitted={submittedNames.has(selectedName)}
+          reanalyseButton={<ReanalyseButton agenticRun={selectedRun} />}
+        />
+      )}
     </UpdatePlanLayout>
   );
 };

@@ -1,6 +1,6 @@
 /** @jest-environment jsdom */
 import * as React from 'react';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import UpdatePlanTab from '../components/update-plan/UpdatePlanTab';
 import { LightspeedAgenticRun } from '../models/agenticrun';
 import { ClusterVersion } from '../models/clusterversion';
@@ -26,7 +26,7 @@ jest.mock('../hooks/useApprovalActions', () => ({
 }));
 jest.mock('../components/update-plan/ApprovalPolicyWarningBanner', () => ({ default: () => null }));
 jest.mock('../components/update-plan/PlanHeader', () => ({ default: () => null }));
-jest.mock('../components/update-plan/AnalysisResultView', () => ({ default: () => null }));
+jest.mock('../components/update-plan/DiagnosisCard', () => ({ default: () => null }));
 jest.mock('../components/shared/PhaseLabel', () => ({ default: () => null }));
 jest.mock('../components/shared/ExecutionLogs', () => ({
   ExecutionLogs: () => <div data-testid="execution-logs" />,
@@ -123,4 +123,122 @@ it('keeps logs mounted during verification with step-only execution evidence', (
   show(run);
   expect(run.status?.conditions?.some((condition) => condition.type === 'Executed')).toBe(false);
   expect(screen.getByTestId('execution-logs')).toBeTruthy();
+});
+
+it('follows the active phase while preserving manual toggles across refreshes', () => {
+  const analyzing = fixture([{ type: 'Analyzed', status: 'Unknown' }]);
+  const { rerender } = show(analyzing);
+  const analysisToggle = () => screen.getByRole('button', { name: /Update analysis/ });
+  const executionToggle = () => screen.getByRole('button', { name: /Update execution/ });
+  expect(analysisToggle().getAttribute('aria-expanded')).toBe('true');
+  expect(executionToggle().getAttribute('aria-expanded')).toBe('false');
+
+  fireEvent.click(analysisToggle());
+  rerender(
+    <UpdatePlanTab agenticRuns={[{ ...analyzing }]} clusterVersion={{} as ClusterVersion} />,
+  );
+  expect(analysisToggle().getAttribute('aria-expanded')).toBe('false');
+
+  const executing = fixture([
+    { type: 'Analyzed', status: 'True' },
+    { type: 'Executed', status: 'Unknown' },
+  ]);
+  rerender(<UpdatePlanTab agenticRuns={[executing]} clusterVersion={{} as ClusterVersion} />);
+  expect(analysisToggle().getAttribute('aria-expanded')).toBe('false');
+  expect(executionToggle().getAttribute('aria-expanded')).toBe('true');
+  expect(within(analysisToggle()).getByRole('img', { name: 'Completed' })).toBeTruthy();
+  expect(within(executionToggle()).getByRole('img', { name: 'Executing' })).toBeTruthy();
+
+  fireEvent.click(analysisToggle());
+  fireEvent.click(executionToggle());
+  const completed = fixture([
+    { type: 'Analyzed', status: 'True' },
+    { type: 'Executed', status: 'True' },
+    { type: 'Verified', status: 'True' },
+  ]);
+  rerender(<UpdatePlanTab agenticRuns={[completed]} clusterVersion={{} as ClusterVersion} />);
+  expect(analysisToggle().getAttribute('aria-expanded')).toBe('true');
+  expect(executionToggle().getAttribute('aria-expanded')).toBe('false');
+  expect(within(executionToggle()).getByRole('img', { name: 'Completed' })).toBeTruthy();
+});
+
+it('shows both sections for a pending run and resets expansion when selecting another version', () => {
+  const pending = fixture([]);
+  const executing = fixture([
+    { type: 'Analyzed', status: 'True' },
+    { type: 'Executed', status: 'Unknown' },
+  ]);
+  executing.metadata = { ...executing.metadata, uid: 'other-uid', name: 'other-plan' };
+  render(
+    <UpdatePlanTab agenticRuns={[pending, executing]} clusterVersion={{} as ClusterVersion} />,
+  );
+  expect(
+    screen.getByRole('button', { name: /Update analysis/ }).getAttribute('aria-expanded'),
+  ).toBe('true');
+  expect(
+    screen.getByRole('button', { name: /Update execution/ }).getAttribute('aria-expanded'),
+  ).toBe('false');
+  fireEvent.change(screen.getByRole('combobox', { name: 'Select agentic run' }), {
+    target: { value: 'other-plan' },
+  });
+  expect(
+    screen.getByRole('button', { name: /Update analysis/ }).getAttribute('aria-expanded'),
+  ).toBe('false');
+  expect(
+    screen.getByRole('button', { name: /Update execution/ }).getAttribute('aria-expanded'),
+  ).toBe('true');
+});
+
+it('keeps analysis expanded when execution is skipped', () => {
+  show(
+    fixture([
+      { type: 'Analyzed', status: 'True' },
+      { type: 'Executed', status: 'True', reason: 'Skipped' },
+      { type: 'Verified', status: 'True', reason: 'Skipped' },
+    ]),
+  );
+  expect(
+    screen.getByRole('button', { name: /Update analysis/ }).getAttribute('aria-expanded'),
+  ).toBe('true');
+  const executionToggle = screen.getByRole('button', { name: /Update execution/ });
+  expect(executionToggle.getAttribute('aria-expanded')).toBe('false');
+  expect(within(executionToggle).getByRole('img', { name: 'Skipped' })).toBeTruthy();
+  expect(screen.queryByTestId('execution-logs')).toBeNull();
+});
+
+it('keeps analysis results available after execution failure and places logs before remediation', () => {
+  (useAnalysisResults as jest.Mock).mockReturnValue([
+    [
+      {
+        metadata: { name: 'analysis', namespace: 'ns' },
+        status: {
+          options: [
+            {
+              title: 'Recommended update plan',
+              remediationPlan: { description: 'Update the cluster', risk: 'Low' },
+            },
+          ],
+        },
+      },
+    ],
+  ]);
+  show(
+    fixture([
+      { type: 'Analyzed', status: 'True' },
+      { type: 'Executed', status: 'False', message: 'Execution stopped' },
+    ]),
+  );
+  expect(screen.getByText('Execution stopped')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: /Update analysis/ }));
+  const remediation = screen.getByRole('button', { name: /Recommended update plan/ });
+  expect(
+    screen.getByTestId('analysis-logs').compareDocumentPosition(remediation) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(screen.getByText('Update the cluster')).toBeTruthy();
+  expect(
+    within(screen.getByRole('button', { name: /Update analysis/ })).getByRole('img', {
+      name: 'Completed',
+    }),
+  ).toBeTruthy();
 });
