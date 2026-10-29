@@ -3,7 +3,6 @@ import * as React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import UpdatePlanTab from '../components/update-plan/UpdatePlanTab';
 import { LightspeedAgenticRun } from '../models/agenticrun';
-import { ClusterVersion } from '../models/clusterversion';
 import { useAnalysisResults } from '../hooks/useAgenticRuns';
 
 jest.mock('react-i18next', () => ({
@@ -26,7 +25,9 @@ jest.mock('../hooks/useApprovalActions', () => ({
 }));
 jest.mock('../components/update-plan/ApprovalPolicyWarningBanner', () => ({ default: () => null }));
 jest.mock('../components/update-plan/PlanHeader', () => ({ default: () => null }));
-jest.mock('../components/update-plan/DiagnosisCard', () => ({ default: () => null }));
+jest.mock('../components/shared/MarkdownContent', () => ({
+  MarkdownContent: ({ text }: { text: string }) => <div>{text}</div>,
+}));
 jest.mock('../components/shared/PhaseLabel', () => ({ default: () => null }));
 jest.mock('../components/shared/ExecutionLogs', () => ({
   ExecutionLogs: () => <div data-testid="execution-logs" />,
@@ -38,8 +39,7 @@ const fixture = (conditions: unknown[]) =>
     metadata: { uid: 'uid', name: 'plan', namespace: 'ns' },
     status: { conditions, steps: { analysis: { results: [{ name: 'analysis' }] } } },
   }) as LightspeedAgenticRun;
-const show = (run: LightspeedAgenticRun) =>
-  render(<UpdatePlanTab agenticRuns={[run]} clusterVersion={{} as ClusterVersion} />);
+const show = (run: LightspeedAgenticRun) => render(<UpdatePlanTab agenticRuns={[run]} />);
 
 beforeEach(() => {
   (useAnalysisResults as jest.Mock).mockReturnValue([
@@ -134,16 +134,14 @@ it('follows the active phase while preserving manual toggles across refreshes', 
   expect(executionToggle().getAttribute('aria-expanded')).toBe('false');
 
   fireEvent.click(analysisToggle());
-  rerender(
-    <UpdatePlanTab agenticRuns={[{ ...analyzing }]} clusterVersion={{} as ClusterVersion} />,
-  );
+  rerender(<UpdatePlanTab agenticRuns={[{ ...analyzing }]} />);
   expect(analysisToggle().getAttribute('aria-expanded')).toBe('false');
 
   const executing = fixture([
     { type: 'Analyzed', status: 'True' },
     { type: 'Executed', status: 'Unknown' },
   ]);
-  rerender(<UpdatePlanTab agenticRuns={[executing]} clusterVersion={{} as ClusterVersion} />);
+  rerender(<UpdatePlanTab agenticRuns={[executing]} />);
   expect(analysisToggle().getAttribute('aria-expanded')).toBe('false');
   expect(executionToggle().getAttribute('aria-expanded')).toBe('true');
   expect(within(analysisToggle()).getByRole('img', { name: 'Completed' })).toBeTruthy();
@@ -156,7 +154,7 @@ it('follows the active phase while preserving manual toggles across refreshes', 
     { type: 'Executed', status: 'True' },
     { type: 'Verified', status: 'True' },
   ]);
-  rerender(<UpdatePlanTab agenticRuns={[completed]} clusterVersion={{} as ClusterVersion} />);
+  rerender(<UpdatePlanTab agenticRuns={[completed]} />);
   expect(analysisToggle().getAttribute('aria-expanded')).toBe('true');
   expect(executionToggle().getAttribute('aria-expanded')).toBe('false');
   expect(within(executionToggle()).getByRole('img', { name: 'Completed' })).toBeTruthy();
@@ -169,9 +167,7 @@ it('shows both sections for a pending run and resets expansion when selecting an
     { type: 'Executed', status: 'Unknown' },
   ]);
   executing.metadata = { ...executing.metadata, uid: 'other-uid', name: 'other-plan' };
-  render(
-    <UpdatePlanTab agenticRuns={[pending, executing]} clusterVersion={{} as ClusterVersion} />,
-  );
+  render(<UpdatePlanTab agenticRuns={[pending, executing]} />);
   expect(
     screen.getByRole('button', { name: /Update analysis/ }).getAttribute('aria-expanded'),
   ).toBe('true');

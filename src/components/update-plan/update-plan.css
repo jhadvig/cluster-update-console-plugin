@@ -7,6 +7,10 @@
   font-weight: var(--pf-t--global--font--weight--bold);
 }
 
+.cluster-update-plugin__remediation-option--selected {
+  outline: 2px solid var(--pf-t--global--border--color--clicked);
+}
+
 /* ActivePlanView layout */
 .cluster-update-plugin__active-plan {
   padding-block-start: var(--pf-t--global--spacer--md);

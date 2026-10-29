@@ -24,7 +24,6 @@ import {
   getPhaseDisplay,
   hasRemediationPlan,
 } from '../../models/agenticrun';
-import { ClusterVersion } from '../../models/clusterversion';
 import { I18N_NAMESPACE } from '../../utils/constants';
 import { hasExecution } from '../../utils/execution';
 import { getLogCondition, hasStepLogs } from '../../utils/logPhase';
@@ -85,7 +84,6 @@ const UpdatePhaseSection: React.FC<UpdatePhaseSectionProps> = ({
 
 type UpdatePlanSectionsProps = {
   agenticRun: LightspeedAgenticRun;
-  clusterVersion: ClusterVersion;
   analysisResults: LightspeedAnalysisResult[];
   submitted: boolean;
   reanalyseButton: React.ReactNode;
@@ -93,12 +91,12 @@ type UpdatePlanSectionsProps = {
 
 const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
   agenticRun,
-  clusterVersion,
   analysisResults,
   submitted,
   reanalyseButton,
 }) => {
   const { t } = useTranslation(I18N_NAMESPACE);
+  const [selection, setSelection] = React.useState<{ resultKey: string; index: number }>();
   const phase = derivePhase(agenticRun);
   const analysisCondition = getLogCondition(agenticRun, 'analysis');
   const executionCondition = getLogCondition(agenticRun, 'execution');
@@ -139,8 +137,24 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
       )
     : undefined;
   const resultData = getAnalysisDataFromResult(result);
+  // Selection and confirmation must refer to the exact analysis the user reviewed.
+  const resultKey = `${result?.metadata?.uid ?? resultRef}:${JSON.stringify(resultData.options)}`;
+  const executableIndices = resultData.options.flatMap((option, index) =>
+    option.remediationPlan ? [index] : [],
+  );
+  const selectedOptionIndex =
+    selection?.resultKey === resultKey && executableIndices.includes(selection.index)
+      ? selection.index
+      : executableIndices.length === 1
+        ? executableIndices[0]
+        : undefined;
+  const noActionRequired =
+    result?.status?.actionRequired === 'False' || analysisCondition?.reason === 'NoActionRequired';
   const hasResultData =
-    resultData.options.length > 0 || resultData.components.length > 0 || !!resultData.analysisData;
+    resultData.options.length > 0 ||
+    resultData.components.length > 0 ||
+    !!resultData.analysisData ||
+    !!resultData.diagnosis;
   const analysisLogs = hasStepLogs(agenticRun, 'analysis') ? (
     <AnalysisLogs run={agenticRun} />
   ) : null;
@@ -204,7 +218,17 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
             )}
             {hasResultData && analysisPhase !== 'Analyzing' ? (
               <StackItem>
-                <AnalysisResultView analysisData={resultData} analysisLogs={analysisLogs} />
+                <AnalysisResultView
+                  key={resultKey}
+                  analysisData={resultData}
+                  analysisLogs={analysisLogs}
+                  selectedOptionIndex={selectedOptionIndex}
+                  onSelectOption={
+                    phase === 'Proposed' && !noActionRequired
+                      ? (index) => setSelection({ resultKey, index })
+                      : undefined
+                  }
+                />
               </StackItem>
             ) : (
               <>
@@ -220,7 +244,14 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
                 {analysisLogs && <StackItem>{analysisLogs}</StackItem>}
               </>
             )}
-            {result && !hasRemediationPlan(result) && phase === 'Proposed' && (
+            {noActionRequired && (
+              <StackItem>
+                <Alert isInline variant="success" title={t('No action required')}>
+                  {t('The analysis did not request remediation. No execution approval is needed.')}
+                </Alert>
+              </StackItem>
+            )}
+            {result && !noActionRequired && !hasRemediationPlan(result) && phase === 'Proposed' && (
               <StackItem>
                 <Alert variant="info" isInline title={t('No remediation plan available')}>
                   {t(
@@ -229,12 +260,17 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
                 </Alert>
               </StackItem>
             )}
-            {result && hasRemediationPlan(result) && phase === 'Proposed' && (
+            {result && !noActionRequired && hasRemediationPlan(result) && phase === 'Proposed' && (
               <StackItem>
                 <DecisionActions
+                  key={`${resultKey}:${selectedOptionIndex}`}
                   agenticRun={agenticRun}
-                  clusterVersion={clusterVersion}
-                  analysisData={resultData}
+                  selectedOptionIndex={selectedOptionIndex}
+                  selectedOption={
+                    selectedOptionIndex === undefined
+                      ? undefined
+                      : resultData.options[selectedOptionIndex]
+                  }
                 />
               </StackItem>
             )}
@@ -245,7 +281,7 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
         <UpdatePhaseSection
           title={t('Update execution')}
           phase={executionPhase}
-          skipped={executionSkipped}
+          skipped={executionSkipped || noActionRequired}
           isExpanded={expanded.execution}
           onToggle={(execution) => setExpanded((prev) => ({ ...prev, execution }))}
         >
@@ -261,22 +297,24 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
                 </Alert>
               </StackItem>
             )}
-            {hasExecution(agenticRun) && !executionSkipped ? (
+            {hasExecution(agenticRun) && !executionSkipped && !noActionRequired ? (
               <StackItem>
                 <ExecutionLogs run={agenticRun} />
               </StackItem>
             ) : (
               <StackItem>
                 <Content component="p">
-                  {executionSkipped
-                    ? t('Execution was skipped for this analysis-only update plan.')
-                    : phase === 'Denied'
-                      ? t('Execution was denied.')
-                      : phase === 'Approved'
-                        ? t('Waiting for execution to start...')
-                        : t(
-                            'Execution has not started. Review and approve the analysis plan to proceed.',
-                          )}
+                  {noActionRequired
+                    ? t('Execution is not required for this analysis.')
+                    : executionSkipped
+                      ? t('Execution was skipped for this analysis-only update plan.')
+                      : phase === 'Denied'
+                        ? t('Execution was denied.')
+                        : phase === 'Approved'
+                          ? t('Waiting for execution to start...')
+                          : t(
+                              'Execution has not started. Review and approve the analysis plan to proceed.',
+                            )}
                 </Content>
               </StackItem>
             )}

@@ -21,7 +21,6 @@ import {
 } from '@patternfly/react-core';
 import { CubesIcon, RedoIcon, SearchIcon } from '@patternfly/react-icons';
 import { k8sDelete } from '@openshift-console/dynamic-plugin-sdk';
-import { ClusterVersion } from '../../models/clusterversion';
 import {
   LightspeedAgenticRun,
   LightspeedAgenticRunModel,
@@ -130,11 +129,10 @@ const UpdatePlanLayout: React.FC<UpdatePlanLayoutProps> = ({ children }) => (
 );
 
 type UpdatePlanTabProps = {
-  clusterVersion: ClusterVersion;
   agenticRuns: LightspeedAgenticRun[];
 };
 
-const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRuns }) => {
+const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ agenticRuns }) => {
   const { t } = useTranslation(I18N_NAMESPACE);
   const [selectedName, setSelectedName] = React.useState('');
   const [submittedNames, setSubmittedNames] = React.useState<Set<string>>(new Set());
@@ -170,7 +168,13 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
     if (stillPending.size < submittedNames.size) setSubmittedNames(stillPending);
   }, [agenticRuns, submittedNames]);
 
-  const { approveStage, error: approveError, inProgress } = useApprovalActions(selectedApproval);
+  const {
+    approveStage,
+    error: approveError,
+    inProgress,
+    canApprove,
+    canApproveLoading,
+  } = useApprovalActions(selectedApproval);
 
   const handleAnalyse = React.useCallback(async () => {
     if (!selectedRun?.metadata?.name) return;
@@ -257,7 +261,7 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
                   <Button
                     variant="primary"
                     icon={<SearchIcon />}
-                    isDisabled={inProgress || !selectedApproval}
+                    isDisabled={inProgress || !selectedApproval || !canApprove || canApproveLoading}
                     isLoading={inProgress}
                     onClick={handleAnalyse}
                   >
@@ -285,7 +289,6 @@ const UpdatePlanTab: React.FC<UpdatePlanTabProps> = ({ clusterVersion, agenticRu
         <UpdatePlanSections
           key={selectedRun.metadata?.uid ?? selectedName}
           agenticRun={selectedRun}
-          clusterVersion={clusterVersion}
           analysisResults={analysisResults}
           submitted={submittedNames.has(selectedName)}
           reanalyseButton={<ReanalyseButton agenticRun={selectedRun} />}

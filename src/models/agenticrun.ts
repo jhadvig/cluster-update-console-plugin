@@ -151,7 +151,8 @@ export const derivePhase = (agenticRun?: LightspeedAgenticRun): AgenticRunPhase 
   if (approved?.status === 'True') return 'Approved';
   if (approved?.status === 'False') return 'Denied';
 
-  if (analyzed?.status === 'True') return 'Proposed';
+  if (analyzed?.status === 'True')
+    return analyzed.reason === 'NoActionRequired' ? 'Analysed' : 'Proposed';
   if (analyzed?.status === 'Unknown') return 'Analyzing';
   if (analyzed?.status === 'False') return 'Failed';
 
@@ -263,6 +264,7 @@ export type ProposedAction = {
 
 export type RemediationPlan = {
   description: string;
+  estimatedImpact?: string;
   actions: ProposedAction[];
   risk?: 'Low' | 'Medium' | 'High' | 'Critical';
   reversible?: 'Reversible' | 'Irreversible' | 'Partial';
@@ -319,12 +321,17 @@ export type AnalysisDataPayload = Record<string, any>;
 export type AnalysisData = {
   options: RemediationOption[];
   components: AdapterComponent[];
+  diagnosis?: import('./generated/analysisresults').DiagnosisResult;
   analysisData?: AnalysisDataPayload;
 };
 
 export const getAnalysisDataFromResult = (result?: LightspeedAnalysisResult): AnalysisData => {
   if (!result?.status?.options?.length) {
-    return { options: [], components: [] };
+    return {
+      options: [],
+      components: [],
+      ...(result?.status?.diagnosis && { diagnosis: result.status.diagnosis }),
+    };
   }
 
   const options = result.status.options as RemediationOption[];
