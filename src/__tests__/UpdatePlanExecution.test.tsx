@@ -1,6 +1,7 @@
 /** @jest-environment jsdom */
 import * as React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
+import { useK8sWatchResource } from '@openshift-console/dynamic-plugin-sdk';
 import UpdatePlanTab from '../components/update-plan/UpdatePlanTab';
 import { LightspeedAgenticRun } from '../models/agenticrun';
 import { useAnalysisResults } from '../hooks/useAgenticRuns';
@@ -32,6 +33,7 @@ jest.mock('../components/shared/PhaseLabel', () => ({ default: () => null }));
 jest.mock('../components/shared/ExecutionLogs', () => ({
   ExecutionLogs: () => <div data-testid="execution-logs" />,
   AnalysisLogs: () => <div data-testid="analysis-logs" />,
+  VerificationLogs: () => <div data-testid="verification-logs" />,
 }));
 
 const fixture = (conditions: unknown[]) =>
@@ -72,7 +74,6 @@ it.each(['Unknown', 'True', 'False'])(
 
 it.each([
   ['Executed', 'Execution'],
-  ['Verified', 'Verification'],
   ['Escalated', 'Escalation'],
 ])('uses the matching %s failure instead of stale analysis failureReason', (type, label) => {
   show(
@@ -125,6 +126,45 @@ it('keeps logs mounted during verification with step-only execution evidence', (
   expect(screen.getByTestId('execution-logs')).toBeTruthy();
 });
 
+it('shows actions from the latest referenced execution attempt before the execution logs', () => {
+  const run = fixture([{ type: 'Executed', status: 'True' }]);
+  run.status!.steps!.execution = {
+    results: [
+      { name: 'execution-1', outcome: 'Failed' },
+      { name: 'execution-2', outcome: 'Succeeded' },
+    ],
+  };
+  (useK8sWatchResource as jest.Mock).mockReturnValue([
+    {
+      metadata: { name: 'execution-2', namespace: 'ns' },
+      spec: { agenticRunName: 'plan' },
+      status: {
+        actionsTaken: [
+          {
+            type: 'mutation',
+            description: 'Updated the cluster',
+            outcome: 'Succeeded',
+            output: 'OK',
+          },
+        ],
+      },
+    },
+    true,
+  ]);
+  show(run);
+  expect(useK8sWatchResource).toHaveBeenLastCalledWith(
+    expect.objectContaining({ name: 'execution-2', namespace: 'ns' }),
+  );
+  const actionsToggle = screen.getByRole('button', { name: 'View action details' });
+  expect(
+    actionsToggle.compareDocumentPosition(screen.getByTestId('execution-logs')) &
+      Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.click(actionsToggle);
+  expect(screen.getByText('Updated the cluster')).toBeTruthy();
+  expect((screen.getByRole('textbox', { name: 'Output' }) as HTMLInputElement).value).toBe('OK');
+});
+
 it('follows the active phase while preserving manual toggles across refreshes', () => {
   const analyzing = fixture([{ type: 'Analyzed', status: 'Unknown' }]);
   const { rerender } = show(analyzing);
@@ -155,12 +195,15 @@ it('follows the active phase while preserving manual toggles across refreshes', 
     { type: 'Verified', status: 'True' },
   ]);
   rerender(<UpdatePlanTab agenticRuns={[completed]} />);
-  expect(analysisToggle().getAttribute('aria-expanded')).toBe('true');
+  expect(analysisToggle().getAttribute('aria-expanded')).toBe('false');
   expect(executionToggle().getAttribute('aria-expanded')).toBe('false');
   expect(within(executionToggle()).getByRole('img', { name: 'Completed' })).toBeTruthy();
+  expect(
+    screen.getByRole('button', { name: /Update verification/ }).getAttribute('aria-expanded'),
+  ).toBe('true');
 });
 
-it('shows both sections for a pending run and resets expansion when selecting another version', () => {
+it('shows three sections for a pending run and resets expansion when selecting another version', () => {
   const pending = fixture([]);
   const executing = fixture([
     { type: 'Analyzed', status: 'True' },
@@ -174,6 +217,9 @@ it('shows both sections for a pending run and resets expansion when selecting an
   expect(
     screen.getByRole('button', { name: /Update execution/ }).getAttribute('aria-expanded'),
   ).toBe('false');
+  expect(
+    screen.getByRole('button', { name: /Update verification/ }).getAttribute('aria-expanded'),
+  ).toBe('false');
   fireEvent.change(screen.getByRole('combobox', { name: 'Select agentic run' }), {
     target: { value: 'other-plan' },
   });
@@ -183,6 +229,64 @@ it('shows both sections for a pending run and resets expansion when selecting an
   expect(
     screen.getByRole('button', { name: /Update execution/ }).getAttribute('aria-expanded'),
   ).toBe('true');
+});
+
+it.each(['Unknown', 'True', 'False'])(
+  'places verification logs in their own togglable section and preserves completed execution (%s)',
+  (status) => {
+    show(
+      fixture([
+        { type: 'Analyzed', status: 'True' },
+        { type: 'Executed', status: 'True' },
+        { type: 'Verified', status, message: 'Verification detail' },
+      ]),
+    );
+    const execution = screen.getByRole('button', { name: /Update execution/ });
+    const verification = screen.getByRole('button', { name: /Update verification/ });
+    expect(within(execution).getByRole('img', { name: 'Completed' })).toBeTruthy();
+    expect(
+      within(verification).getByRole('img', {
+        name: status === 'Unknown' ? 'Verifying' : status === 'True' ? 'Completed' : 'Failed',
+      }),
+    ).toBeTruthy();
+    expect(verification.getAttribute('aria-expanded')).toBe('true');
+    expect(
+      within(screen.getByRole('region', { name: /Update verification/ })).getByTestId(
+        'verification-logs',
+      ),
+    ).toBeTruthy();
+    fireEvent.click(verification);
+    expect(verification.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(verification);
+    expect(verification.getAttribute('aria-expanded')).toBe('true');
+  },
+);
+
+it('shows verification as skipped for an analysis-only plan without mounting verification logs', () => {
+  show(
+    fixture([
+      { type: 'Analyzed', status: 'True' },
+      { type: 'Executed', status: 'True', reason: 'Skipped' },
+      { type: 'Verified', status: 'True', reason: 'Skipped' },
+    ]),
+  );
+  const verification = screen.getByRole('button', { name: /Update verification/ });
+  expect(within(verification).getByRole('img', { name: 'Skipped' })).toBeTruthy();
+  expect(screen.queryByTestId('verification-logs')).toBeNull();
+});
+
+it('places verification approval in its own section after execution succeeds', () => {
+  const run = fixture([{ type: 'Executed', status: 'True' }]);
+  run.spec = {
+    request: 'Verify the update outcome',
+    analysis: {},
+    execution: {},
+    verification: { agent: 'smart' },
+  };
+  show(run);
+  const section = screen.getByRole('region', { name: /Update verification/ });
+  expect(within(section).getByRole('button', { name: 'Approve verification' })).toBeTruthy();
+  expect(screen.queryByTestId('verification-logs')).toBeNull();
 });
 
 it('keeps analysis expanded when execution is skipped', () => {

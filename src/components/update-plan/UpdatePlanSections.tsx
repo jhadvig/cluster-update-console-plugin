@@ -27,11 +27,13 @@ import {
 import { I18N_NAMESPACE } from '../../utils/constants';
 import { hasExecution } from '../../utils/execution';
 import { getLogCondition, hasStepLogs } from '../../utils/logPhase';
-import { AnalysisLogs, ExecutionLogs } from '../shared/ExecutionLogs';
+import { AnalysisLogs, ExecutionLogs, VerificationLogs } from '../shared/ExecutionLogs';
 import PhaseIcon from '../shared/PhaseIcon';
 import AnalysisResultView from './AnalysisResultView';
 import DecisionActions from './DecisionActions';
 import PlanHeader from './PlanHeader';
+import { ActionsTaken } from './ActionsTaken';
+import { VerificationApproval } from './VerificationApproval';
 
 type UpdatePhaseSectionProps = {
   title: string;
@@ -57,6 +59,7 @@ const UpdatePhaseSection: React.FC<UpdatePhaseSectionProps> = ({
     <Card>
       <CardBody>
         <ExpandableSection
+          className="cluster-update-plugin__phase-section"
           toggleWrapper="h2"
           toggleContent={
             <span className="cluster-update-plugin__phase-heading">
@@ -100,20 +103,36 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
   const phase = derivePhase(agenticRun);
   const analysisCondition = getLogCondition(agenticRun, 'analysis');
   const executionCondition = getLogCondition(agenticRun, 'execution');
+  const verificationCondition = getLogCondition(agenticRun, 'verification');
   const executionSkipped = executionCondition?.reason === 'Skipped';
+  const verificationSkipped = verificationCondition?.reason === 'Skipped';
+  const verificationStarted = !verificationSkipped && hasStepLogs(agenticRun, 'verification');
+  const verificationConfigured = !!agenticRun.spec?.verification || verificationStarted;
   const executionStarted =
     !executionSkipped &&
     (hasExecution(agenticRun) ||
       ['AwaitingSync', 'Verifying', 'Completed', 'Escalating', 'Escalated'].includes(phase));
+  const activeSection =
+    verificationStarted ||
+    (verificationConfigured && !verificationSkipped && executionCondition?.status === 'True')
+      ? 'verification'
+      : executionStarted
+        ? 'execution'
+        : 'analysis';
   const [expanded, setExpanded] = React.useState({
-    analysis: !executionStarted,
-    execution: executionStarted,
+    analysis: activeSection === 'analysis',
+    execution: activeSection === 'execution',
+    verification: activeSection === 'verification',
   });
 
   // Follow phase transitions, but preserve manual toggles during status refreshes.
   React.useEffect(() => {
-    setExpanded({ analysis: !executionStarted, execution: executionStarted });
-  }, [executionStarted]);
+    setExpanded({
+      analysis: activeSection === 'analysis',
+      execution: activeSection === 'execution',
+      verification: activeSection === 'verification',
+    });
+  }, [activeSection]);
 
   const analysisPhase: AgenticRunPhase =
     analysisCondition?.status === 'True'
@@ -123,8 +142,24 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
         : phase === 'Analyzing' || submitted
           ? 'Analyzing'
           : 'Pending';
-  const executionPhase =
-    executionStarted || phase === 'Approved' || phase === 'Denied' ? phase : 'Pending';
+  const executionPhase: AgenticRunPhase =
+    executionCondition?.status === 'True'
+      ? 'Completed'
+      : executionCondition?.status === 'False'
+        ? 'Failed'
+        : executionCondition?.status === 'Unknown'
+          ? 'Executing'
+          : phase === 'Approved' || phase === 'Denied'
+            ? phase
+            : 'Pending';
+  const verificationPhase: AgenticRunPhase =
+    verificationCondition?.status === 'True'
+      ? 'Completed'
+      : verificationCondition?.status === 'False'
+        ? 'Failed'
+        : verificationStarted
+          ? 'Verifying'
+          : 'Pending';
   const failedStage = phase === 'Failed' ? getFailedStage(agenticRun) : undefined;
   const analysisFailed = analysisPhase === 'Failed';
   const stepResults = agenticRun.status?.steps?.analysis?.results;
@@ -158,6 +193,7 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
   const analysisLogs = hasStepLogs(agenticRun, 'analysis') ? (
     <AnalysisLogs run={agenticRun} />
   ) : null;
+  const executionResultName = agenticRun.status?.steps?.execution?.results?.at(-1)?.name;
 
   return (
     <>
@@ -286,7 +322,7 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
           onToggle={(execution) => setExpanded((prev) => ({ ...prev, execution }))}
         >
           <Stack hasGutter>
-            {failedStage && !analysisFailed && (
+            {failedStage && !analysisFailed && failedStage.label !== 'Verification' && (
               <StackItem>
                 <Alert
                   variant="danger"
@@ -298,9 +334,23 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
               </StackItem>
             )}
             {hasExecution(agenticRun) && !executionSkipped && !noActionRequired ? (
-              <StackItem>
-                <ExecutionLogs run={agenticRun} />
-              </StackItem>
+              <>
+                {executionResultName &&
+                  agenticRun.metadata?.namespace &&
+                  agenticRun.metadata.name && (
+                    <StackItem>
+                      <ActionsTaken
+                        key={executionResultName}
+                        name={executionResultName}
+                        namespace={agenticRun.metadata.namespace}
+                        agenticRunName={agenticRun.metadata.name}
+                      />
+                    </StackItem>
+                  )}
+                <StackItem>
+                  <ExecutionLogs run={agenticRun} />
+                </StackItem>
+              </>
             ) : (
               <StackItem>
                 <Content component="p">
@@ -319,6 +369,36 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
               </StackItem>
             )}
           </Stack>
+        </UpdatePhaseSection>
+      </StackItem>
+      <StackItem>
+        <UpdatePhaseSection
+          title={t('Update verification')}
+          phase={verificationPhase}
+          skipped={verificationSkipped || !verificationConfigured || noActionRequired}
+          isExpanded={expanded.verification}
+          onToggle={(verification) => setExpanded((prev) => ({ ...prev, verification }))}
+        >
+          {verificationStarted && !noActionRequired ? (
+            <VerificationLogs run={agenticRun} />
+          ) : verificationConfigured &&
+            !verificationSkipped &&
+            !noActionRequired &&
+            executionCondition?.status === 'True' ? (
+            <VerificationApproval run={agenticRun} />
+          ) : (
+            <Content component="p">
+              {noActionRequired
+                ? t('Verification is not required for this analysis.')
+                : verificationSkipped
+                  ? t('Verification was skipped for this update plan.')
+                  : !verificationConfigured
+                    ? t('Verification is not configured for this update plan.')
+                    : t(
+                        'Verification starts after successful execution and any required approval.',
+                      )}
+            </Content>
+          )}
         </UpdatePhaseSection>
       </StackItem>
     </>

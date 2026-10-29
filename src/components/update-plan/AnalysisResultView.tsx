@@ -348,6 +348,7 @@ const AnalysisResultView: React.FC<AnalysisResultViewProps> = ({
                 isExpanded={isExpanded}
                 onToggleExpand={togglePanel}
                 isSelected={selectedOptionIndex === idx}
+                isRecommended={idx === 0 && !!onSelectOption && !!option.remediationPlan}
                 onSelect={
                   onSelectOption && option.remediationPlan ? () => onSelectOption(idx) : undefined
                 }

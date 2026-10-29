@@ -25,6 +25,7 @@ jest.mock('../components/shared/MarkdownContent', () => ({
 jest.mock('../components/shared/ExecutionLogs', () => ({
   AnalysisLogs: () => <div>Analysis logs</div>,
   ExecutionLogs: () => null,
+  VerificationLogs: () => null,
 }));
 
 const run = {
@@ -103,8 +104,9 @@ it('approves the original option index and never patches ClusterVersion or overr
   );
   fireEvent.click(screen.getByRole('radio', { name: 'Select plan 2' }));
   fireEvent.click(screen.getByRole('button', { name: 'View details for Update operator first' }));
+  fireEvent.click(screen.getByRole('button', { name: 'View command details' }));
   expect(
-    screen.getByText(analysis.status!.options![1].remediationPlan!.actions[0].command!),
+    screen.getByDisplayValue(analysis.status!.options![1].remediationPlan!.actions[0].command!),
   ).toBeTruthy();
   fireEvent.click(screen.getByRole('button', { name: 'Approve plan' }));
   expect(k8sPatch).not.toHaveBeenCalled();

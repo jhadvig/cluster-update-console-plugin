@@ -9,13 +9,22 @@ they are not an exported Lightspeed API and do not automatically receive upstrea
 
 | Local component | Upstream source | Local adaptations |
 | --- | --- | --- |
-| `RemediationOptionCard.tsx` | `src/components/runs/detail/RemediationOptionCard.tsx` | Uses our raw `RemediationOption` rather than the private Lightspeed view model; local i18n/CSS; retains risk labels; optional selection for diagnosis-only/read-only views; accessible disclosure IDs; omits download and recommended-option UI. |
+| `RemediationOptionCard.tsx` | `src/components/runs/detail/RemediationOptionCard.tsx` | Uses our raw `RemediationOption` rather than the private Lightspeed view model; local i18n/CSS; retains risk labels; optional selection for diagnosis-only/read-only views; accessible disclosure IDs; first proposed option is labeled AI recommended, matching upstream; omits download UI. |
 | `CodeBlockWithClipboard.tsx` | `src/components/CodeBlockWithClipboard.tsx` | Local i18n; preserves newline when expanding a long command. |
-| `RequiredPermissions.tsx` | `src/components/runs/detail/RequiredPermissions.tsx` | Simplified permission table using our RBAC types; explicit API groups/resource names; no discovery-based resource icons/links or write-permission summaries. |
+| `RequiredPermissions.tsx` | `src/components/runs/detail/RequiredPermissions.tsx` | Uses our RBAC types and local i18n/CSS; matches upstream permission counts, scoped-privileges notice, write summaries, namespace links, resource icons, and verb labels; retains a level-four heading and an accessible table name. |
+
+`src/utils/rbac-utils.ts` is adapted from the upstream helper at the same revision
+for permission scope, write summaries, and resource discovery.
 
 Markdown uses this plugin's existing sanitized `MarkdownContent`. Approval/rejection
 and log streaming remain owned by the update page. Commands are displayed here, but
 execution is performed by the agent after an `AgenticRunApproval` decision.
+
+`ProposedCommands.tsx` and `VerificationPlan.tsx` are local presentation adaptations:
+commands and verification checks appear in collapsed-by-default tables matching
+Required permissions. They preserve original step order and copyable commands;
+verification also includes check names and expected results. `StepTypeLabel.tsx`
+provides consistent type colors for both tables.
 
 ## TODO: replace these copies with supported shared components
 

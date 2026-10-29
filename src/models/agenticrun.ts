@@ -44,6 +44,17 @@ export const AnalysisResultModel: K8sModel = {
   labelPlural: 'AnalysisResults',
 };
 
+export const ExecutionResultModel: K8sModel = {
+  apiGroup: 'agentic.openshift.io',
+  apiVersion: 'v1alpha1',
+  kind: 'ExecutionResult',
+  plural: 'executionresults',
+  abbr: 'ER',
+  namespaced: true,
+  label: 'ExecutionResult',
+  labelPlural: 'ExecutionResults',
+};
+
 export const ApprovalPolicyModel: K8sModel = {
   apiGroup: 'agentic.openshift.io',
   apiVersion: 'v1alpha1',
@@ -58,6 +69,7 @@ export const ApprovalPolicyModel: K8sModel = {
 export const LightspeedAgenticRunGVK = getGroupVersionKindForModel(LightspeedAgenticRunModel);
 export const AgenticRunApprovalGVK = getGroupVersionKindForModel(AgenticRunApprovalModel);
 export const AnalysisResultGVK = getGroupVersionKindForModel(AnalysisResultModel);
+export const ExecutionResultGVK = getGroupVersionKindForModel(ExecutionResultModel);
 export const ApprovalPolicyGVK = getGroupVersionKindForModel(ApprovalPolicyModel);
 
 // --- Resource Types (composed from generated CRD types + K8sResourceCommon) ---
@@ -75,6 +87,22 @@ export type LightspeedAgenticRunApproval = K8sResourceCommon & {
 export type LightspeedAnalysisResult = K8sResourceCommon & {
   spec: AnalysisResultSpec;
   status?: AnalysisResultStatus;
+};
+
+export type ExecutionActionTaken = {
+  type: string;
+  description: string;
+  outcome: 'Succeeded' | 'Failed';
+  output?: string;
+  error?: string;
+};
+
+export type LightspeedExecutionResult = K8sResourceCommon & {
+  spec: { agenticRunName: string };
+  status?: {
+    actionsTaken?: ExecutionActionTaken[];
+    failureReason?: string;
+  };
 };
 
 export type LightspeedApprovalPolicy = K8sResourceCommon & {
@@ -209,7 +237,7 @@ export const getPhaseDisplay = (phase?: AgenticRunPhase | string): PhaseDisplay 
     case 'Denied':
       return { color: 'red', label: 'Denied' };
     case 'AwaitingSync':
-      return { color: 'teal', label: 'Awaiting Sync' };
+      return { color: 'teal', label: 'Awaiting verification' };
     case 'Escalating':
       return { color: 'orange', label: 'Escalating' };
     case 'Escalated':

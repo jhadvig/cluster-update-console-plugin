@@ -6,11 +6,7 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
-  Content,
-  DescriptionList,
-  DescriptionListDescription,
-  DescriptionListGroup,
-  DescriptionListTerm,
+  ClipboardCopy,
   Flex,
   FlexItem,
   Label,
@@ -24,14 +20,16 @@ import { useTranslation } from 'react-i18next';
 import { RemediationOption, getRiskColor } from '../../../models/agenticrun';
 import { I18N_NAMESPACE } from '../../../utils/constants';
 import { MarkdownContent } from '../../shared/MarkdownContent';
-import { CodeBlockWithClipboard } from './CodeBlockWithClipboard';
 import { RequiredPermissions } from './RequiredPermissions';
+import { ProposedCommands } from './ProposedCommands';
+import { VerificationPlan } from './VerificationPlan';
 
 type RemediationOptionCardProps = {
   option: RemediationOption;
   index: number;
   isExpanded: boolean;
   isSelected: boolean;
+  isRecommended?: boolean;
   onSelect?: () => void;
   onToggleExpand: () => void;
 };
@@ -41,6 +39,7 @@ export const RemediationOptionCard: React.FC<RemediationOptionCardProps> = ({
   index,
   isExpanded,
   isSelected,
+  isRecommended = false,
   onSelect,
   onToggleExpand,
 }) => {
@@ -68,6 +67,13 @@ export const RemediationOptionCard: React.FC<RemediationOptionCardProps> = ({
                     onChange={onSelect}
                     label={t('Select plan {{number}}', { number: index + 1 })}
                   />
+                </FlexItem>
+              )}
+              {isRecommended && (
+                <FlexItem>
+                  <Label color="blue" isCompact>
+                    {t('AI recommended')}
+                  </Label>
                 </FlexItem>
               )}
               {plan?.risk && (
@@ -153,20 +159,7 @@ export const RemediationOptionCard: React.FC<RemediationOptionCardProps> = ({
           )}
           {!!plan?.actions?.length && (
             <StackItem>
-              <Title headingLevel="h4" size="md">
-                {t('Proposed agent commands')}
-              </Title>
-              <Content component="ol">
-                {plan.actions.map((action, i) => (
-                  <Content component="li" key={i}>
-                    <Label isCompact variant="outline">
-                      {action.type}
-                    </Label>
-                    <MarkdownContent text={action.description} />
-                    {action.command && <CodeBlockWithClipboard code={action.command} />}
-                  </Content>
-                ))}
-              </Content>
+              <ProposedCommands actions={plan.actions} />
             </StackItem>
           )}
           {plan?.rollbackPlan && (
@@ -176,31 +169,21 @@ export const RemediationOptionCard: React.FC<RemediationOptionCardProps> = ({
               </Title>
               <MarkdownContent text={plan.rollbackPlan.description} />
               {plan.rollbackPlan.command && (
-                <CodeBlockWithClipboard code={plan.rollbackPlan.command} />
+                <ClipboardCopy
+                  isReadOnly
+                  copyAriaLabel={t('Copy to clipboard')}
+                  textAriaLabel={t('Command')}
+                  hoverTip={t('Copy to clipboard')}
+                  clickTip={t('Successfully copied to clipboard!')}
+                >
+                  {plan.rollbackPlan.command}
+                </ClipboardCopy>
               )}
             </StackItem>
           )}
           {option.verification && (
             <StackItem>
-              <Title headingLevel="h4" size="md">
-                {t('Verification plan')}
-              </Title>
-              <MarkdownContent text={option.verification.description} />
-              <DescriptionList>
-                {option.verification.steps?.map((step, i) => (
-                  <DescriptionListGroup key={i}>
-                    <DescriptionListTerm>{step.name}</DescriptionListTerm>
-                    <DescriptionListDescription>
-                      {step.command && <CodeBlockWithClipboard code={step.command} />}
-                      {step.expected && (
-                        <Content component="small">
-                          {t('Expected: {{expected}}', { expected: step.expected })}
-                        </Content>
-                      )}
-                    </DescriptionListDescription>
-                  </DescriptionListGroup>
-                ))}
-              </DescriptionList>
+              <VerificationPlan verification={option.verification} />
             </StackItem>
           )}
         </Stack>
