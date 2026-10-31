@@ -333,6 +333,35 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
                 </Alert>
               </StackItem>
             )}
+            {executionPhase === 'Executing' && (
+              <StackItem>
+                <Flex alignItems={{ default: 'alignItemsCenter' }} gap={{ default: 'gapMd' }}>
+                  <FlexItem>
+                    <Spinner size="lg" aria-label={t('Executing')} />
+                  </FlexItem>
+                  <FlexItem>
+                    <Stack>
+                      <StackItem>
+                        <strong>
+                          {agenticRun.status?.steps?.execution?.sandbox?.claimName
+                            ? t('AI agent is executing the selected upgrade plan...')
+                            : t('Starting execution — waiting for agent sandbox...')}
+                        </strong>
+                      </StackItem>
+                      {agenticRun.status?.steps?.execution?.sandbox?.claimName && (
+                        <StackItem>
+                          <Content component="small">
+                            {t('Sandbox: {{name}}', {
+                              name: agenticRun.status.steps.execution.sandbox.claimName,
+                            })}
+                          </Content>
+                        </StackItem>
+                      )}
+                    </Stack>
+                  </FlexItem>
+                </Flex>
+              </StackItem>
+            )}
             {hasExecution(agenticRun) && !executionSkipped && !noActionRequired ? (
               <>
                 {executionResultName &&
@@ -379,6 +408,33 @@ const UpdatePlanSections: React.FC<UpdatePlanSectionsProps> = ({
           isExpanded={expanded.verification}
           onToggle={(verification) => setExpanded((prev) => ({ ...prev, verification }))}
         >
+          {verificationPhase === 'Verifying' && (
+            <Flex alignItems={{ default: 'alignItemsCenter' }} gap={{ default: 'gapMd' }}>
+              <FlexItem>
+                <Spinner size="lg" aria-label={t('Verifying')} />
+              </FlexItem>
+              <FlexItem>
+                <Stack>
+                  <StackItem>
+                    <strong>
+                      {agenticRun.status?.steps?.verification?.sandbox?.claimName
+                        ? t('AI agent is verifying the upgrade result...')
+                        : t('Starting verification — waiting for agent sandbox...')}
+                    </strong>
+                  </StackItem>
+                  {agenticRun.status?.steps?.verification?.sandbox?.claimName && (
+                    <StackItem>
+                      <Content component="small">
+                        {t('Sandbox: {{name}}', {
+                          name: agenticRun.status.steps.verification.sandbox.claimName,
+                        })}
+                      </Content>
+                    </StackItem>
+                  )}
+                </Stack>
+              </FlexItem>
+            </Flex>
+          )}
           {verificationStarted && !noActionRequired ? (
             <VerificationLogs run={agenticRun} />
           ) : verificationConfigured &&
